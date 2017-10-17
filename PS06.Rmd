@@ -14,7 +14,7 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-  echo = TRUE, fig.width=8, fig.height=4.5, message=FALSE, warning = FALSE
+  echo = TRUE, fig.width=8, fig.height=4.5, message=FALSE, warning = FALSE, options(scipen=999)
   )
 set.seed(76)
 
@@ -22,6 +22,9 @@ set.seed(76)
 library(tidyverse)
 library(broom)
 library(knitr)
+library(Metrics)
+
+
 ```
 
 
@@ -30,7 +33,7 @@ library(knitr)
 
 # Collaboration
 
-Please indicate who you collaborated with on this assignment: 
+Please indicate who you collaborated with on this assignment: -
 
 
 
@@ -95,8 +98,83 @@ n_sample <- 10000
 
 # Computation
 
-```{r}
+$$ MSE = \mathbb{E}[(Y - \hat{f}(x))^2] = mean(\ (y - estimate)^2\ )  $$
+$$Bias^2 = (\ \mathbb{E}[\hat{f}(x)] -f(x)\ )^2 = (\ mean(estimate) - f(x)\ )^2$$
 
+$$Variance = \mathbb{E} [ (\ \hat{f}(x) - \mathbb{E}[\hat{f}(x)]\ )^2] = mean(\ (estimate - mean(estimate)\ )^2\ ) $$
+$$ Irreducible = \sigma^2_{\epsilon}  $$
+
+
+$$ Sum = Bias^2 + Variance + Irreducible $$
+```{r}
+# mse function
+eval_err <- function(trueY, estimate){
+  return (mean((trueY-estimate)^2))
+}
+
+# bias function
+eval_bias_sq <- function(actual, estimate){
+  return ((mean(estimate) - actual)^2)
+}
+
+# variance function
+eval_var <- function(estimate){
+  return (mean((estimate - mean(estimate))^2))
+}
+```
+
+```{r}
+set.seed(495)
+
+# set some values
+f_0.95 <- c(0.95^2) # f(x0) where x0=.95
+# calculate irreducible error
+irr_err <- sigma^2
+
+# vectors
+predictions_df_2 <- runif(n=n_sample) # vector to contain df=2 predictions
+predictions_df_99 <- runif(n=n_sample) # vector to contain df=99 predictions
+actual_val <- runif(n=n_sample) # vector to contain true y
+
+for(i in 1:n_sample){
+  sampled_points <- generate_sample(f, n, sigma)
+  # calculate y 
+  actual_val[i] <- 0.95^2 + rnorm(1, mean = 0, sd = sigma)
+  
+  # fit model for df = 2
+  fitted_df_2 <- smooth.spline(x=sampled_points$x, y=sampled_points$y, df=2) 
+  # make prediction for x0 = 0.95
+  pred_df_2 <- predict(fitted_df_2, c(0.95))[2] %>% unlist()
+  predictions_df_2[i] <- pred_df_2
+  
+  # fit model for df = 99
+  fitted_df_99 <- smooth.spline(x=sampled_points$x, y=sampled_points$y, df=99) 
+  # make prediction for x0 = 0.95
+  pred_df_99 <- predict(fitted_df_99, c(0.95))[2] %>% unlist()
+  predictions_df_99[i] <- pred_df_99
+  
+}
+
+
+# for df = 2:
+#   calculate mse
+err_df_2 <- eval_err(trueY = actual_val, estimate = predictions_df_2)
+#   calculate bias^2
+bias_sq_df_2 <- eval_bias_sq(actual = f_0.95, estimate = predictions_df_2)
+#   calculate variance 
+var_df_2 <- var(predictions_df_2) 
+#   calculate sum for df = 2
+sum_df_2 <- var_df_2 + bias_sq_df_2 + irr_err
+
+# for df = 99:
+#   calculate mse
+err_df_99 <- eval_err(trueY = actual_val, estimate = predictions_df_99)
+#   calculate bias^2
+bias_sq_df_99 <- eval_bias_sq(actual = f_0.95, estimate = predictions_df_99)
+#   calculate variance 
+var_df_99 <- var(predictions_df_99) 
+#   calculate sum for df = 99
+sum_df_99 <- var_df_99 + bias_sq_df_99 + irr_err
 ```
 
 
@@ -113,10 +191,27 @@ output tables comparing:
 |----:|------------:|-----:|-----------:|-----:|
 |     X|           X  |     X |      X |         X |
 
-where `sum = bias_squared + var + irreducible`. You can created cleanly formatted tables like the one above by piping a data frame into `knitr::kable(digits=4)`.
+where `sum = bias_squared + var + irreducible`. You can create cleanly formatted tables like the one above by piping a data frame into `knitr::kable(digits=4)`.
 
+```{r, echo=FALSE}
+# create table with results
+df <- c("df = 2", "df = 99")
+mse <- c(round(err_df_2,4), round(err_df_99,4))
+bias_squared <- c(round(bias_sq_df_2,4), round(bias_sq_df_99,4))
+var <- c(round(var_df_2,4), round(var_df_99,4))
+irreducible <- c(round(irr_err,4), round(irr_err,4))
+sum <- c(round(sum_df_2,4), round(sum_df_99,4))
 
-
+tbl <- cbind(df, 
+             mse, 
+             bias_squared,
+             var,
+             irreducible,
+             sum
+             )
+colnames(tbl) <- c(" ", "MSE", "bias_squared", "variance", "irreducible", "sum")
+tbl %>% knitr::kable(digits=4)
+```
 
 # Analysis
 
@@ -131,6 +226,27 @@ $x$ in this example, and not just for $$\mbox{MSE}\left[\widehat{f}(x_0)\right]
 
 **Answers**:
 
-1.
-1.
-1.
+1. I would compare the differences of the bias squared and the variance values of both models. For our df=2 model, we would expect the bias squared value to be higher than that of our df=3 model. This is because the model would be a straight line and would therefore not give predictions that are closer to the true value as compared to our df=99 model. On the other hand, because of the straight line nature of our df=2 model, we would expect it to have a lower variance than that of our df=99 model because of the variance-bias tradeoff. Our df=99 model would give us more accuracy predictions however, we will have higher variability. So, a sanity check would be to compare bias squared and the variance values of both models. A contradictory pattern would be a red flag. Another sanity check would be to look at the true value of our target point and the predicted values of the target point. For our df=99 model, I would expect the true value of our target point to be in our prediction interval while I would not necessarily expect the true value of our target point to be in our prediction interval for our df=2 model.So, if the true value is not within the prediction interval for the df=99 model, I would suspect there is something wrong with our calculation. The difference between sum and mse should be relatively small as though obtained differently, sum and mse represent the same error.
+
+1. We follow the same procedure but when we predict our model, we use the entire domain if our function f(x) as our test set and not a single target point. We will have vectors that will store each type of error for each point in our target vector point.
+
+A sketch of the procedure would be as follows:
+
+Suppose we will run n_sample = 10,000 simulations with n = 500.
+
+First, we would generate random x values along the lines of:
+
+x <- runif(n = n_sample, min = 0, max =1)
+
+Then we will generate y values, based on the x values.
+
+y <- rnorm(n = n_sample, mean = f(x), sd = sigma)
+
+From there we can fit our models, get $\hat{y}$ through the predict() function and apply the eval_err, eval_bias_sq, eval_var methods for each estimate of our domain x. Here we will have a vector storing those values for each estimate. The irreducible error will stay the same.
+
+1. If there is a considerable difference between the error of both models, I would choose the model with the lower error. However, if the difference in error is so small, I think it would depend on what my goal is. If my goal is solely to get an accurate a prediction of the point of interest, I would choose the df=99 model. However, if I am concerned with variability, I would choose the df=2 model. I would also consider which is a bigger 'danger' - over-fitting or under-fitting. If over-fitting is better than under-fitting, I would go for the model with higher model complexity and vice versa.
+
+# References
+
+* Understanding the Bias-Variance Tradeoff ([link](http://scott.fortmann-roe.com/docs/BiasVariance.html)) Lecture 2.7
+
